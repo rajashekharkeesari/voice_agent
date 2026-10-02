@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hospital Voice Assistant</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="dot" id="status-dot"></span>
+          <h1>Hospital Voice Assistant</h1>
+        </div>
+        <span class="status" id="status-text">Disconnected</span>
+      </header>
+
+      <main class="chat" id="chat">
+        <div class="empty" id="empty-state">
+          Press <strong>Start</strong> and start talking. Your speech and the
+          assistant's replies will appear here.
+        </div>
+      </main>
+
+      <footer class="controls">
+        <button id="connect-btn" class="btn primary">Start</button>
+        <button id="mic-btn" class="btn" disabled>Mute mic</button>
+        <div class="level" title="Your mic level">
+          <div class="level-fill" id="level-fill"></div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Hidden audio element the bot's TTS voice is played through -->
+    <audio id="bot-audio" autoplay></audio>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
