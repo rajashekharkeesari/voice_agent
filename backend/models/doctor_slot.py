@@ -10,4 +10,4 @@ class DoctorSlot(Base):
     date = Column(Date, nullable=False)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
-    status = Column(String, nullable=False, default= "available")  # e.g., "available", "booked", "unavailable"
+    status = Column(String, nullable=False, default= "available")  # e.g., "available", "booked"

@@ -2,36 +2,97 @@ from models.hospital_hours import HospitalHours
 
 
 class HospitalHoursRepository:
+
     def __init__(self, session):
         self.session = session
 
-    def create_hospital_hours(self, day_of_week, opening_time, closing_time, is_open=True):
-        hours = HospitalHours(day_of_week=day_of_week, opening_time=opening_time, closing_time=closing_time, is_open=is_open)
+    def create(
+        self,
+        hospital_id,
+        day_of_week,
+        opening_time,
+        closing_time,
+        is_open=True
+    ):
+        hours = HospitalHours(
+            hospital_id=hospital_id,
+            day_of_week=day_of_week,
+            opening_time=opening_time,
+            closing_time=closing_time,
+            is_open=is_open
+        )
+
         self.session.add(hours)
         self.session.commit()
+        self.session.refresh(hours)
+
         return hours
 
-    def get_hours_by_day(self, day_of_week):
-        return self.session.query(HospitalHours).filter(HospitalHours.day_of_week == day_of_week).first()
+    def get_by_id(self, hours_id):
+        return self.session.get(
+            HospitalHours,
+            hours_id
+        )
 
-    def get_weekly_hours(self):
-        return self.session.query(HospitalHours).order_by(HospitalHours.id).all()
+    def get_by_day(self, hospital_id, day_of_week):
+        return (
+            self.session.query(HospitalHours)
+            .filter(
+                HospitalHours.hospital_id == hospital_id,
+                HospitalHours.day_of_week == day_of_week
+            )
+            .first()
+        )
 
-    def update_hospital_hours(self, hours_id, day_of_week=None, opening_time=None, closing_time=None, is_open=None):
-        hours = self.session.get(HospitalHours, hours_id)
+    def get_by_hospital(self, hospital_id):
+        return (
+            self.session.query(HospitalHours)
+            .filter(
+                HospitalHours.hospital_id == hospital_id
+            )
+            .order_by(HospitalHours.id)
+            .all()
+        )
+
+    def get_weekly_hours(self, hospital_id):
+        return self.get_by_hospital(hospital_id)
+
+    def update(
+        self,
+        hours_id,
+        day_of_week=None,
+        opening_time=None,
+        closing_time=None,
+        is_open=None
+    ):
+        hours = self.get_by_id(hours_id)
+
         if not hours:
             return None
-        for field, value in {"day_of_week": day_of_week, "opening_time": opening_time, "closing_time": closing_time, "is_open": is_open}.items():
+
+        fields = {
+            "day_of_week": day_of_week,
+            "opening_time": opening_time,
+            "closing_time": closing_time,
+            "is_open": is_open
+        }
+
+        for field, value in fields.items():
             if value is not None:
                 setattr(hours, field, value)
+
         self.session.commit()
+        self.session.refresh(hours)
+
         return hours
 
-    def is_hospital_open(self, day_of_week, at_time=None):
-        hours = self.get_hours_by_day(day_of_week)
-        if not hours or not hours.is_open:
-            return False
-        return at_time is None or hours.opening_time <= at_time <= hours.closing_time
+    def delete(self, hours_id):
+        hours = self.get_by_id(hours_id)
 
-    get_hospital_is_open = get_hours_by_day
-    get_hospital_hours_by_id = lambda self, hours_id: self.session.get(HospitalHours, hours_id)
+        if not hours:
+            return None
+
+        self.session.delete(hours)
+        self.session.commit()
+
+        return hours

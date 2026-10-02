@@ -11,4 +11,4 @@ class DoctorSchedules(Base):
     schedule_day = Column(String, nullable=False)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
-    slot_duration = Column(Integer, nullable=False)  # Duration in minutes
+    slot_duration = Column(Integer, nullable=False)  

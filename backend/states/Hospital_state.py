@@ -18,7 +18,6 @@ class HospitalState(BaseModel):
     # Agent-specific state
     supervisor: SupervisorState | None = None
     appointment: AppointmentState | None = None
-
     is_running: bool = True
     last_updated: str = ""
     error_message: str | None = None
