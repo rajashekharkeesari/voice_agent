@@ -32,3 +32,7 @@ class HospitalState(BaseModel):
     is_running: bool = True
     last_updated: str = ""
     error_message: str | None = None
+
+    # Set True by the appointment node so the supervisor->appointment
+    # conditional ends the graph instead of looping forever.
+    handled: bool = False

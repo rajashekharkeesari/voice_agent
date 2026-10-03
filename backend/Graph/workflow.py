@@ -1,22 +1,70 @@
-"""Voice assistant entrypoint for pipecat.
+"""Two-node LangGraph workflow for the hospital voice assistant.
 
-A single receptionist agent runs the whole call (identify -> reason -> task ->
-confirm), so there is no per-utterance keyword routing on the live path. The
-agent keeps conversation + persistent memory per caller (thread_id) and keeps
-structured call state in the DB via its state tools.
+Structure (as designed):
 
-pipecat's LangchainProcessor calls ``compiled_graph.astream({"input": text})``
-and pushes every yielded chunk to TTS, so the reply is spoken incrementally.
-The caller's thread is taken from the processor config (session_id).
+    START -> supervisor
+    supervisor -> (conditional) -> appointment | END
+    appointment -> supervisor        (loops back; supervisor then ENDs)
+
+The conditional routes to the appointment node when the request is
+appointment-related and hasn't been handled yet. The appointment node sets
+`handled=True`, so on the loop-back the supervisor conditional goes to END
+(no infinite loop).
+
+pipecat integration: pipecat's LangchainProcessor calls
+``compiled_graph.astream({"input": text})`` and streams the yielded text to
+TTS. The raw StateGraph yields state updates, so we wrap it in a small adapter
+(``compiled_graph``) that runs the graph and yields the final ``output`` text.
+The plain compiled graph is exported as ``app``.
 """
 
 from typing import Any, AsyncIterator
 
 from langchain_core.runnables import Runnable
+from langgraph.graph import END, START, StateGraph
 
-from backend.nodes.streaming import DEFAULT_THREAD_ID, astream_answer
+from backend.nodes.appointment_node import appointment_node
+from backend.nodes.conditional_node import (
+    supervisor_to_appointment_condition,
+)
+from backend.nodes.streaming import (
+    DEFAULT_THREAD_ID,
+    _get_async_checkpointer,
+)
+from backend.nodes.supervisor_node import supervisor_node
+from backend.states.Hospital_state import HospitalState
+
+# ---------------------------------------------------------------------------
+# Build the graph
+# ---------------------------------------------------------------------------
+workflow = StateGraph(HospitalState)
+
+workflow.add_node("supervisor", supervisor_node)
+workflow.add_node("appointment", appointment_node)
+
+workflow.add_edge(START, "supervisor")
+
+workflow.add_conditional_edges(
+    "supervisor",
+    supervisor_to_appointment_condition,
+    {
+        "appointment": "appointment",
+        END: END,
+    },
+)
+
+workflow.add_edge("appointment", "supervisor")
+
+# Compile with a persistent ASYNC checkpointer so each caller's conversation is
+# remembered across turns (identity, reason, booking details). pipecat invokes
+# the graph asynchronously (ainvoke/astream), which the sync SqliteSaver can't
+# serve.
+app = workflow.compile(checkpointer=_get_async_checkpointer())
 
 
+# ---------------------------------------------------------------------------
+# pipecat adapter: {"input": text} -> streamed reply text
+# ---------------------------------------------------------------------------
 def _extract_input(payload: Any) -> str:
     if isinstance(payload, str):
         return payload
@@ -30,47 +78,61 @@ def _extract_input(payload: Any) -> str:
     return getattr(payload, "input", "") or ""
 
 
-def _thread_id_from_config(config) -> str:
+def _output_of(result) -> str:
+    if isinstance(result, dict):
+        return result.get("output", "") or ""
+    return getattr(result, "output", "") or ""
+
+
+def _thread_config(config) -> dict:
     """pipecat passes config={"configurable": {"session_id": <participant>}}.
-    Use it as the conversation thread so each caller has isolated memory."""
+    Map it to the thread_id the checkpointer needs so each caller has isolated
+    conversation memory. Each turn starts a fresh `handled`/`output` by
+    resetting those; identity/reason persist via the checkpointer + call-state
+    store."""
+    thread_id = DEFAULT_THREAD_ID
     if isinstance(config, dict):
         configurable = config.get("configurable") or {}
-        return (
+        thread_id = (
             configurable.get("thread_id")
             or configurable.get("session_id")
             or DEFAULT_THREAD_ID
         )
-    return DEFAULT_THREAD_ID
+    return {"configurable": {"thread_id": thread_id}}
 
 
 class _VoiceGraphRunnable(Runnable):
-    """Runnable consumed by pipecat's LangchainProcessor.
+    """Adapter consumed by pipecat's LangchainProcessor.
 
-    astream({"input": text}) -> yields reply chunks for incremental TTS.
+    astream({"input": text}) -> yields the graph's final reply text.
     """
 
     async def astream(
         self, input: Any, config=None, **kwargs
     ) -> AsyncIterator[str]:
         user_text = _extract_input(input)
-        thread_id = _thread_id_from_config(config)
-        async for chunk in astream_answer(user_text, thread_id):
-            yield chunk
+        result = await app.ainvoke(
+            {"input": user_text, "handled": False, "output": ""},
+            config=_thread_config(config),
+        )
+        text = _output_of(result)
+        if text:
+            yield text
 
     async def ainvoke(self, input: Any, config=None, **kwargs) -> str:
-        parts = []
-        async for chunk in self.astream(input, config, **kwargs):
-            parts.append(chunk)
-        return "".join(parts)
+        user_text = _extract_input(input)
+        result = await app.ainvoke(
+            {"input": user_text, "handled": False, "output": ""},
+            config=_thread_config(config),
+        )
+        return _output_of(result)
 
     def invoke(self, input: Any, config=None, **kwargs) -> str:
         import asyncio
 
+        # The graph uses an async checkpointer, so run the async path.
         return asyncio.run(self.ainvoke(input, config, **kwargs))
 
 
 # What pipecat imports.
 compiled_graph = _VoiceGraphRunnable()
-
-# Backwards-compatible alias.
-workflow = compiled_graph

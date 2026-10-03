@@ -37,7 +37,10 @@ _agent_cache: dict = {}
 
 def _get_checkpointer():
     """Return a persistent SqliteSaver (falls back to in-memory MemorySaver
-    if the sqlite saver package isn't available)."""
+    if the sqlite saver package isn't available).
+
+    This is the SYNCHRONOUS saver, used by sync code paths. For the async
+    StateGraph (invoked via ainvoke/astream) use _get_async_checkpointer()."""
     global _checkpointer, _checkpointer_ctx
     if _checkpointer is not None:
         return _checkpointer
@@ -55,6 +58,31 @@ def _get_checkpointer():
 
         _checkpointer = MemorySaver()
     return _checkpointer
+
+
+_async_checkpointer = None
+_async_checkpointer_ctx = None
+
+
+def _get_async_checkpointer():
+    """Return a persistent AsyncSqliteSaver for graphs invoked with
+    ainvoke/astream (the sync SqliteSaver raises on async calls). Falls back to
+    in-memory MemorySaver (which supports both sync and async) if unavailable."""
+    global _async_checkpointer, _async_checkpointer_ctx
+    if _async_checkpointer is not None:
+        return _async_checkpointer
+
+    db_path = os.getenv("CHECKPOINT_DB_ASYNC", "receptionist_memory_async.sqlite")
+    try:
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+        _async_checkpointer_ctx = AsyncSqliteSaver.from_conn_string(db_path)
+        _async_checkpointer = _async_checkpointer_ctx.__enter__()
+    except Exception:  # noqa: BLE001 - fall back to in-memory
+        from langgraph.checkpoint.memory import MemorySaver
+
+        _async_checkpointer = MemorySaver()
+    return _async_checkpointer
 
 
 def _get_agent(thread_id: str, tools):
