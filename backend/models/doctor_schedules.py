@@ -1,6 +1,6 @@
 from sqlalchemy import Column, ForeignKey, Integer, String, Time
 
-from db.connection import Base
+from backend.db.connection import Base
 
 
 class DoctorSchedules(Base):

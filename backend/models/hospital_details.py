@@ -1,5 +1,5 @@
 from sqlalchemy import Column,Boolean,Integer,String ,ForeignKey
-from db.connection import Base
+from backend.db.connection import Base
 
 class HospitalService(Base):
     __tablename__ = "Hospital"

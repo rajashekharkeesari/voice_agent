@@ -1,4 +1,4 @@
-from models.departments import Department
+from backend.models.departments import Department
 
 class DepartmentRepository:
     def __init__(self, session):

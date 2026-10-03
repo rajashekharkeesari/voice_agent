@@ -1,4 +1,4 @@
-from models.hospital_hours import HospitalHours
+from backend.models.hospital_hours import HospitalHours
 
 
 class HospitalHoursRepository:

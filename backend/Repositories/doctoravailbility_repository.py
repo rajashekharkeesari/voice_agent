@@ -1,7 +1,6 @@
-```python
-from models.doctor_leaves import DoctorLeaves
-from models.doctor_schedules import DoctorSchedules
-from models.doctor_slot import DoctorSlot
+from backend.models.doctor_leaves import DoctorLeaves
+from backend.models.doctor_schedules import DoctorSchedules
+from backend.models.doctor_slot import DoctorSlot
 
 
 class DoctorAvailabilityRepository:
@@ -324,4 +323,3 @@ class DoctorAvailabilityRepository:
             slot_id,
             "available"
         )
-```

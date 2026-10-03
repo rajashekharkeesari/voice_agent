@@ -1,4 +1,4 @@
-from models.appointments import Appointment
+from backend.models.appointments import Appointment
 
 
 class AppointmentRepository:

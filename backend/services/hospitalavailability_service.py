@@ -1,135 +1,52 @@
-from backend.repositories.hospital_repository import HospitalRepository
-from backend.repositories.hospital_hours_repository import HospitalHoursRepository
-from backend.repositories.hospital_closures_repository import HospitalClosureRepository
+from backend.Repositories.hospital_hours_repository import (
+    HospitalHoursRepository,
+)
+from backend.Repositories.hospital_closure_repository import (
+    HospitalClosureRepository,
+)
 
 
 class HospitalAvailabilityService:
+    def __init__(self, session):
+        self.session = session
+        self.hours_repository = HospitalHoursRepository(session)
+        self.closure_repository = HospitalClosureRepository(session)
+
+    def get_weekly_hours(self, hospital_id):
+        return self.hours_repository.get_weekly_hours(hospital_id)
+
+    def get_hours_for_day(self, hospital_id, day_of_week):
+        return self.hours_repository.get_by_day(hospital_id, day_of_week)
+
+    def get_closures(self, hospital_id):
+        return self.closure_repository.get_by_hospital(hospital_id)
+
+    def is_closed_on(self, hospital_id, closure_day):
+        return (
+            self.closure_repository.get_by_day(hospital_id, closure_day)
+            is not None
+        )
+
+
+from datetime import datetime  # noqa: E402
+
+from backend.Repositories.doctoravailbility_repository import (  # noqa: E402
+    DoctorAvailabilityRepository,
+)
+
+
+class DoctorAvailabilityService:
+    """Business layer for doctor slots/schedules/leaves."""
 
     def __init__(self, session):
+        self.session = session
+        self.repository = DoctorAvailabilityRepository(session)
 
-        self.hospital_repository = HospitalRepository(session)
+    def list_available_slots(self, doctor_id, date):
+        """date: a datetime.date (or ISO 'YYYY-MM-DD' string)."""
+        if isinstance(date, str):
+            date = datetime.strptime(date, "%Y-%m-%d").date()
+        return self.repository.get_available_slots(doctor_id, date)
 
-        self.hospital_hours_repository = (
-            HospitalHoursRepository(session)
-        )
-
-        self.hospital_closure_repository = (
-            HospitalClosureRepository(session)
-        )
-
-        def check_hospital_availability_day(
-        self,
-        hospital_name,
-        day
-    ):
-
-        hospital = self.hospital_repository.get_by_name(
-            hospital_name
-        )
-
-        if not hospital:
-            raise ValueError("Hospital not found.")
-
-        # Check whether hospital is closed
-        closure = self.hospital_closure_repository.get_by_day(
-            hospital_id=hospital.id,
-            closure_day=day
-        )
-
-        if closure:
-            return {
-                "available": False,
-                "message": "Hospital is closed on this day.",
-                "reason": closure.reason
-            }
-
-        # Check normal weekly schedule
-        hours = self.hospital_hours_repository.get_by_day(
-            hospital_id=hospital.id,
-            day_of_week=day.strftime("%A")
-        )
-
-        if not hours or not hours.is_open:
-            return {
-                "available": False,
-                "message": "Hospital is not working on this day."
-            }
-
-        return {
-            "available": True,
-            "message": "Hospital is working on this day.",
-            "opening_time": hours.opening_time,
-            "closing_time": hours.closing_time
-        }
-
-        def check_hospital_availability_by_time(
-        self,
-        hospital_name,
-        day,
-        time
-    ):
-
-        hospital = self.hospital_repository.get_by_name(
-            hospital_name
-        )
-
-        if not hospital:
-            raise ValueError("Hospital not found.")
-
-        # 1. Check special closure
-        closure = self.hospital_closure_repository.get_by_day(
-            hospital_id=hospital.id,
-            closure_day=day
-        )
-
-        if closure:
-            return {
-                "available": False,
-                "message": "Hospital is closed on this day.",
-                "reason": closure.reason
-            }
-
-        # 2. Get normal working hours
-        hours = self.hospital_hours_repository.get_by_day(
-            hospital_id=hospital.id,
-            day_of_week=day.strftime("%A")
-        )
-
-        if not hours or not hours.is_open:
-            return {
-                "available": False,
-                "message": "Hospital is not working on this day."
-            }
-
-        # 3. Check time
-        if hours.opening_time <= time <= hours.closing_time:
-
-            return {
-                "available": True,
-                "message": "Hospital is working at this time.",
-                "opening_time": hours.opening_time,
-                "closing_time": hours.closing_time
-            }
-
-        return {
-            "available": False,
-            "message": "Hospital is closed at this time.",
-            "opening_time": hours.opening_time,
-            "closing_time": hours.closing_time
-        }
-
-
-
-
-        def get_hospital_closures(self, hospital_name):
-
-        hospital = self.hospital_repository.get_by_name(
-            hospital_name
-        )
-
-        if not hospital:
-            raise ValueError("Hospital not found.")
-
-        return self.hospital_closure_repository.get_by_hospital(
-            hospital.id
-        )
+    def get_slot(self, slot_id):
+        return self.repository.get_slot_by_id(slot_id)

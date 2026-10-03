@@ -1,178 +1,48 @@
-from backend.services.hospital_availability_service import (
-    HospitalAvailabilityService
-)
-
-from backend.db.connection import get_db
+from backend.db.connection import SessionLocal
+from backend.Repositories.hospital_repository import HospitalRepository
 
 
 def register_hospital_tools(mcp):
 
     @mcp.tool()
-    def check_hospital_availability(
-        hospital_name: str,
-        date: str
-    ):
-        """
-        Check whether the hospital is working on a particular date.
-
-        Date format:
-        YYYY-MM-DD
-        """
-
-        db = get_db()
-
+    def get_hospital_info(hospital_id: int = 1):
+        """Get basic information about the hospital (name, contact)."""
+        db = SessionLocal()
         try:
-            service = HospitalAvailabilityService(db)
-
-            result = service.check_hospital_availability_day(
-                hospital_name=hospital_name,
-                day=date
-            )
-
+            repo = HospitalRepository(db)
+            hospital = repo.get_by_id(hospital_id)
+            if not hospital:
+                return {"success": False, "message": "Hospital not found."}
             return {
                 "success": True,
-                "result": result
+                "hospital": {
+                    "id": hospital.id,
+                    "name": hospital.Hospital_name,
+                    "contact_no": hospital.contact_no,
+                    "is_active": hospital.is_active,
+                },
             }
-
-        except ValueError as e:
-
-            return {
-                "success": False,
-                "message": str(e)
-            }
-
         finally:
             db.close()
 
-
     @mcp.tool()
-    def check_hospital_availability_by_time(
-        hospital_name: str,
-        date: str,
-        time: str
-    ):
-        """
-        Check whether the hospital is open at a specific date and time.
-
-        Date:
-        YYYY-MM-DD
-
-        Time:
-        HH:MM
-        """
-
-        db = get_db()
-
+    def list_hospitals():
+        """List all hospitals."""
+        db = SessionLocal()
         try:
-            service = HospitalAvailabilityService(db)
-
-            result = service.check_hospital_availability_by_time(
-                hospital_name=hospital_name,
-                day=date,
-                time=time
-            )
-
+            repo = HospitalRepository(db)
+            hospitals = repo.get_all()
             return {
                 "success": True,
-                "result": result
-            }
-
-        except ValueError as e:
-
-            return {
-                "success": False,
-                "message": str(e)
-            }
-
-        finally:
-            db.close()
-
-
-    @mcp.tool()
-    def get_hospital_hours(
-        hospital_name: str
-    ):
-        """
-        Get the weekly working hours of a hospital.
-        """
-
-        db = get_db()
-
-        try:
-            service = HospitalAvailabilityService(db)
-
-            hours = service.get_hospital_hours(
-                hospital_name
-            )
-
-            return {
-                "success": True,
-                "hours": [
+                "hospitals": [
                     {
-                        "id": item.id,
-                        "hospital_id": item.hospital_id,
-                        "day_of_week": item.day_of_week,
-                        "opening_time": str(
-                            item.opening_time
-                        ),
-                        "closing_time": str(
-                            item.closing_time
-                        ),
-                        "is_open": item.is_open
+                        "id": h.id,
+                        "name": h.Hospital_name,
+                        "contact_no": h.contact_no,
+                        "is_active": h.is_active,
                     }
-                    for item in hours
-                ]
+                    for h in hospitals
+                ],
             }
-
-        except ValueError as e:
-
-            return {
-                "success": False,
-                "message": str(e)
-            }
-
-        finally:
-            db.close()
-
-
-    @mcp.tool()
-    def get_hospital_closures(
-        hospital_name: str
-    ):
-        """
-        Get hospital closure days.
-        """
-
-        db = get_db()
-
-        try:
-            service = HospitalAvailabilityService(db)
-
-            closures = service.get_hospital_closures(
-                hospital_name
-            )
-
-            return {
-                "success": True,
-                "closures": [
-                    {
-                        "id": closure.id,
-                        "hospital_id": closure.hospital_id,
-                        "closure_day": str(
-                            closure.closure_day
-                        ),
-                        "reason": closure.reason
-                    }
-                    for closure in closures
-                ]
-            }
-
-        except ValueError as e:
-
-            return {
-                "success": False,
-                "message": str(e)
-            }
-
         finally:
             db.close()

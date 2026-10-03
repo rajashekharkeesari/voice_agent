@@ -1,295 +1,133 @@
+from datetime import datetime
+
+from backend.Repositories.appointment_repository import AppointmentRepository
+from backend.Repositories.doctoravailbility_repository import (
+    DoctorAvailabilityRepository,
+)
+
+
 class AppointmentService:
+    def __init__(self, session):
+        self.session = session
+        self.appointment_repository = AppointmentRepository(session)
+        self.availability_repository = DoctorAvailabilityRepository(session)
 
-    def __init__(
-        self,
-        appointment_repository,
-        doctor_repository,
-        doctor_availability_repository
-    ):
-        self.appointment_repository = appointment_repository
-        self.doctor_repository = doctor_repository
-        self.doctor_availability_repository = (
-            doctor_availability_repository
-        )
-
-    # --------------------------------------------------
-    # CREATE APPOINTMENT
-    # --------------------------------------------------
-
-    def create_appointment(
+    def book_appointment(
         self,
         patient_id,
         doctor_id,
         appointment_date,
-        slot_id
+        slot_id,
+        status="Scheduled",
     ):
+        """Book an appointment and mark the slot as booked.
 
-        # 1. Check doctor exists
-        doctor = self.doctor_repository.get_doctor_by_id(
-            doctor_id
-        )
-
-        if not doctor:
-            raise ValueError("Doctor not found.")
-
-        # 2. Check doctor is on leave
-        leave = self.doctor_availability_repository.get_leave_by_date(
-            doctor_id=doctor_id,
-            leave_date=appointment_date
-        )
-
-        if leave:
-            raise ValueError(
-                "Doctor is on leave on this date."
-            )
-
-        # 3. Check slot exists
-        slot = self.doctor_availability_repository.get_slot_by_id(
-            slot_id
-        )
-
-        if not slot:
-            raise ValueError("Appointment slot not found.")
-
-        # 4. Make sure slot belongs to this doctor
-        if slot.doctor_id != doctor_id:
-            raise ValueError(
-                "This slot does not belong to the selected doctor."
-            )
-
-        # 5. Check slot status
-        if slot.status != "available":
-            raise ValueError(
-                "This slot is not available."
-            )
-
-        # 6. Check duplicate appointment
-        existing = self.appointment_repository.get_slot_appointment(
+        Returns the Appointment, or None if the slot is already taken
+        (either an existing appointment or a non-available slot).
+        """
+        # Prevent double-booking the same doctor/date/slot.
+        conflict = self.appointment_repository.get_slot_appointment(
             doctor_id=doctor_id,
             appointment_date=appointment_date,
-            slot_id=slot_id
+            slot_id=slot_id,
         )
+        if conflict is not None:
+            return None
 
-        if existing:
-            raise ValueError(
-                "This appointment slot is already booked."
-            )
+        # Reserve the slot (fails if the slot isn't available).
+        slot = self.availability_repository.get_slot_by_id(slot_id)
+        if slot is not None:
+            booked = self.availability_repository.book_slot(slot_id)
+            if booked is None:
+                return None
 
-        # 7. Create appointment
-        appointment = self.appointment_repository.create(
+        return self.appointment_repository.create(
             patient_id=patient_id,
             doctor_id=doctor_id,
             appointment_date=appointment_date,
-            slot_id=slot_id
+            slot_id=slot_id,
+            status=status,
         )
-
-        # 8. Mark slot as booked
-        self.doctor_availability_repository.update_slot_status(
-            slot_id,
-            "booked"
-        )
-
-        return appointment
-
-    # --------------------------------------------------
-    # GET APPOINTMENT
-    # --------------------------------------------------
 
     def get_appointment(self, appointment_id):
+        return self.appointment_repository.get_by_id(appointment_id)
 
-        appointment = self.appointment_repository.get_by_id(
-            appointment_id
-        )
+    def get_appointments_for_patient(self, patient_id):
+        return self.appointment_repository.get_by_patient_id(patient_id)
 
-        if not appointment:
-            raise ValueError(
-                "Appointment not found."
-            )
-
-        return appointment
-
-    # --------------------------------------------------
-    # PATIENT APPOINTMENTS
-    # --------------------------------------------------
-
-    def get_patient_appointments(self, patient_id):
-
-        return self.appointment_repository.get_by_patient_id(
-            patient_id
-        )
-
-    # --------------------------------------------------
-    # DOCTOR APPOINTMENTS
-    # --------------------------------------------------
-
-    def get_doctor_appointments(self, doctor_id):
-
-        return self.appointment_repository.get_by_doctor_id(
-            doctor_id
-        )
-
-    # --------------------------------------------------
-    # APPOINTMENTS BY DATE
-    # --------------------------------------------------
-
-    def get_appointments_by_date(self, appointment_date):
-
-        return self.appointment_repository.get_by_date(
-            appointment_date
-        )
-
-    # --------------------------------------------------
-    # CHECK SLOT
-    # --------------------------------------------------
-
-    def is_slot_available(
-        self,
-        doctor_id,
-        appointment_date,
-        slot_id
-    ):
-
-        slot = self.doctor_availability_repository.get_slot_by_id(
-            slot_id
-        )
-
-        if not slot:
-            return False
-
-        if slot.doctor_id != doctor_id:
-            return False
-
-        if slot.date != appointment_date:
-            return False
-
-        if slot.status != "available":
-            return False
-
-        existing = self.appointment_repository.get_slot_appointment(
-            doctor_id=doctor_id,
-            appointment_date=appointment_date,
-            slot_id=slot_id
-        )
-
-        return existing is None
-
-    # --------------------------------------------------
-    # CANCEL APPOINTMENT
-    # --------------------------------------------------
+    def get_appointments_for_doctor(self, doctor_id):
+        return self.appointment_repository.get_by_doctor_id(doctor_id)
 
     def cancel_appointment(self, appointment_id):
+        """Cancel an appointment and release its slot."""
+        appointment = self.appointment_repository.get_by_id(appointment_id)
+        if appointment is None:
+            return None
 
-        appointment = self.appointment_repository.get_by_id(
-            appointment_id
+        # Free the slot so it can be booked again.
+        if appointment.slot_id is not None:
+            self.availability_repository.release_slot(appointment.slot_id)
+
+        return self.appointment_repository.update(
+            appointment, status="Cancelled"
         )
-
-        if not appointment:
-            raise ValueError(
-                "Appointment not found."
-            )
-
-        if appointment.status == "Cancelled":
-            raise ValueError(
-                "Appointment is already cancelled."
-            )
-
-        # Cancel appointment
-        appointment = self.appointment_repository.update(
-            appointment,
-            status="Cancelled"
-        )
-
-        # Release slot
-        self.doctor_availability_repository.update_slot_status(
-            appointment.slot_id,
-            "available"
-        )
-
-        return appointment
-
-    # --------------------------------------------------
-    # RESCHEDULE APPOINTMENT
-    # --------------------------------------------------
 
     def reschedule_appointment(
         self,
         appointment_id,
-        new_date,
-        new_slot_id
+        new_slot_id,
+        new_appointment_date=None,
     ):
+        """Move an existing appointment to a new slot (and optionally a new
+        date). Releases the old slot, books the new one, and updates the
+        appointment.
 
-        appointment = self.appointment_repository.get_by_id(
-            appointment_id
-        )
+        Returns a dict describing the outcome so callers (tools) can relay a
+        clear message:
+            {"ok": True, "appointment": <Appointment>}
+            {"ok": False, "reason": "not_found" | "slot_unavailable" |
+                                     "slot_conflict" | "bad_date"}
+        """
+        appointment = self.appointment_repository.get_by_id(appointment_id)
+        if appointment is None:
+            return {"ok": False, "reason": "not_found"}
 
-        if not appointment:
-            raise ValueError(
-                "Appointment not found."
-            )
+        doctor_id = appointment.doctor_id
 
-        if appointment.status == "Cancelled":
-            raise ValueError(
-                "Cancelled appointment cannot be rescheduled."
-            )
+        # Resolve/validate the target date.
+        if new_appointment_date is None:
+            target_date = appointment.appointment_date
+        elif isinstance(new_appointment_date, datetime):
+            target_date = new_appointment_date
+        else:
+            return {"ok": False, "reason": "bad_date"}
 
-        old_slot_id = appointment.slot_id
+        # New slot must exist and be available.
+        new_slot = self.availability_repository.get_slot_by_id(new_slot_id)
+        if new_slot is None or new_slot.status != "available":
+            return {"ok": False, "reason": "slot_unavailable"}
 
-        # Get new slot
-        new_slot = (
-            self.doctor_availability_repository
-            .get_slot_by_id(new_slot_id)
-        )
-
-        if not new_slot:
-            raise ValueError(
-                "New slot not found."
-            )
-
-        if new_slot.doctor_id != appointment.doctor_id:
-            raise ValueError(
-                "New slot does not belong to this doctor."
-            )
-
-        if new_slot.date != new_date:
-            raise ValueError(
-                "New slot does not belong to the selected date."
-            )
-
-        if new_slot.status != "available":
-            raise ValueError(
-                "New slot is not available."
-            )
-
-        # Check duplicate appointment
-        existing = self.appointment_repository.get_slot_appointment(
-            doctor_id=appointment.doctor_id,
-            appointment_date=new_date,
+        # No other active appointment should hold the new slot.
+        conflict = self.appointment_repository.get_slot_appointment(
+            doctor_id=doctor_id,
+            appointment_date=target_date,
             slot_id=new_slot_id,
-            exclude_appointment_id=appointment_id
+            exclude_appointment_id=appointment_id,
         )
+        if conflict is not None:
+            return {"ok": False, "reason": "slot_conflict"}
 
-        if existing:
-            raise ValueError(
-                "The new appointment slot is already booked."
-            )
+        # Release the old slot, book the new one, update the appointment.
+        old_slot_id = appointment.slot_id
+        if old_slot_id is not None and old_slot_id != new_slot_id:
+            self.availability_repository.release_slot(old_slot_id)
 
-        # Update appointment
-        appointment = self.appointment_repository.update(
+        self.availability_repository.book_slot(new_slot_id)
+
+        updated = self.appointment_repository.update(
             appointment,
-            appointment_date=new_date,
-            slot_id=new_slot_id
+            slot_id=new_slot_id,
+            appointment_date=target_date,
+            status="Scheduled",
         )
-
-        # Release old slot
-        self.doctor_availability_repository.update_slot_status(
-            old_slot_id,
-            "available"
-        )
-
-        # Book new slot
-        self.doctor_availability_repository.update_slot_status(
-            new_slot_id,
-            "booked"
-        )
-
-        return appointment
+        return {"ok": True, "appointment": updated}

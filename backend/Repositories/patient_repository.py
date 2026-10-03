@@ -1,4 +1,4 @@
-from models.patients import Patient
+from backend.models.patients import Patient
 
 
 class PatientRepository:
@@ -18,6 +18,16 @@ class PatientRepository:
             self.session.query(Patient)
             .filter(Patient.phone_number == phone_number)
             .first()
+        )
+
+    def find_by_name(self, name):
+        """Case-insensitive partial match on patient name."""
+        pattern = f"%{(name or '').strip()}%"
+        return (
+            self.session.query(Patient)
+            .filter(Patient.name.ilike(pattern))
+            .order_by(Patient.name)
+            .all()
         )
 
     def create_patient(self, name, age, phone_number):

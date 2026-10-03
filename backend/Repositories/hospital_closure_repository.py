@@ -1,4 +1,4 @@
-from models.hospital_closures import HospitalClosures
+from backend.models.hospital_closures import HospitalClosures
 
 
 class HospitalClosureRepository:

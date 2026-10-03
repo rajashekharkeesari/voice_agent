@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# Voice Agent backend dependencies
+# Target: Python 3.12 (pipecat supports >=3.10,<3.14; it does NOT run on 3.14)
+# Versions below are the resolved, mutually-compatible set.
+# ---------------------------------------------------------------------------
+
+# --- Pipecat voice pipeline (STT -> LangGraph -> TTS) + transport + runner ---
+# Extras: deepgram (STT), cartesia (TTS), silero (VAD), webrtc (SmallWebRTC),
+#         runner (dev server), langchain (LangchainProcessor bridge)
+pipecat-ai[deepgram,cartesia,silero,webrtc,runner,langchain]==1.12.0
+
+# --- LangGraph orchestration + LangChain ---
+langgraph==1.2.12
+langchain==1.4.3
+langchain-core==1.6.6
+langchain-openai==1.6.7
+
+# --- LLM providers (pick one via LLM_PROVIDER in .env) ---
+# openai (default), ollama (local Llama/Qwen), groq (hosted Llama/Qwen),
+# or openai_compatible (vLLM/Together/OpenRouter/LM Studio).
+langchain-ollama>=1.0.0
+langchain-groq>=1.0.0
+
+# --- MCP server + client (tools exposed to the agent) ---
+# The MCP client (backend/mcp_client/client.py) talks to the server with the
+# official `mcp` SDK directly, so we do NOT use langchain-mcp-adapters (its
+# pinned mcp<2 range conflicts with fastmcp 4.x which needs mcp 2.x).
+fastmcp==4.0.10
+mcp==2.2.0
+
+# --- Database / ORM ---
+SQLAlchemy>=2.0
+
+# --- Core utilities ---
+pydantic>=2.0
+python-dotenv>=1.0
+
+# --- Persistent conversation memory (SqliteSaver checkpointer) ---
+langgraph-checkpoint-sqlite>=2.0
+
+# --- Tests ---
+pytest>=8.0

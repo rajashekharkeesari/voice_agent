@@ -1,182 +1,87 @@
-from backend.services.doctor_availability_service import (
-    DoctorAvailabilityService
+from backend.db.connection import SessionLocal
+from backend.services.hospitalavailability_service import (
+    DoctorAvailabilityService,
+    HospitalAvailabilityService,
 )
-
-from backend.db.connection import get_db
 
 
 def register_availability_tools(mcp):
 
     @mcp.tool()
-    def check_doctor_availability(
-        doctor_id: int,
-        date: str
-    ):
-        """
-        Check whether a doctor is available on a particular date.
-
-        date format:
-        YYYY-MM-DD
-        """
-
-        db = get_db()
-
+    def list_available_slots(doctor_id: int, date: str):
+        """List a doctor's available appointment slots for a date
+        (date = 'YYYY-MM-DD'). Returns slot ids to use when booking."""
+        db = SessionLocal()
         try:
             service = DoctorAvailabilityService(db)
-
-            result = service.is_doctor_available(
-                doctor_id=doctor_id,
-                date=date
-            )
-
-            return {
-                "success": True,
-                "result": result
-            }
-
-        finally:
-            db.close()
-
-
-    @mcp.tool()
-    def get_free_slots(
-        doctor_id: int,
-        date: str
-    ):
-        """
-        Get free appointment slots for a doctor on a date.
-        """
-
-        db = get_db()
-
-        try:
-            service = DoctorAvailabilityService(db)
-
-            slots = service.get_free_slots(
-                doctor_id=doctor_id,
-                date=date
-            )
-
+            try:
+                slots = service.list_available_slots(doctor_id, date)
+            except ValueError:
+                return {
+                    "success": False,
+                    "message": "Invalid date. Use YYYY-MM-DD.",
+                }
             return {
                 "success": True,
                 "slots": [
                     {
-                        "id": slot.id,
-                        "doctor_id": slot.doctor_id,
-                        "date": str(slot.date),
-                        "start_time": str(slot.start_time),
-                        "end_time": str(slot.end_time),
-                        "status": slot.status
+                        "slot_id": s.id,
+                        "start_time": s.start_time.isoformat()
+                        if s.start_time
+                        else None,
+                        "end_time": s.end_time.isoformat()
+                        if s.end_time
+                        else None,
+                        "status": s.status,
                     }
-                    for slot in slots
-                ]
+                    for s in slots
+                ],
             }
-
         finally:
             db.close()
 
-
     @mcp.tool()
-    def get_available_slots(
-        doctor_id: int,
-        date: str
-    ):
-        """
-        Get all available slots for a doctor on a particular date.
-        """
-
-        db = get_db()
-
+    def get_hospital_hours(hospital_id: int = 1):
+        """Get the weekly opening hours for the hospital."""
+        db = SessionLocal()
         try:
-            service = DoctorAvailabilityService(db)
-
-            slots = service.get_available_slots(
-                doctor_id=doctor_id,
-                date=date
-            )
-
+            service = HospitalAvailabilityService(db)
+            hours = service.get_weekly_hours(hospital_id)
             return {
                 "success": True,
-                "slots": [
+                "hours": [
                     {
-                        "id": slot.id,
-                        "doctor_id": slot.doctor_id,
-                        "date": str(slot.date),
-                        "start_time": str(slot.start_time),
-                        "end_time": str(slot.end_time),
-                        "status": slot.status
+                        "day_of_week": h.day_of_week,
+                        "opening_time": h.opening_time.isoformat()
+                        if h.opening_time
+                        else None,
+                        "closing_time": h.closing_time.isoformat()
+                        if h.closing_time
+                        else None,
+                        "is_open": h.is_open,
                     }
-                    for slot in slots
-                ]
+                    for h in hours
+                ],
             }
-
         finally:
             db.close()
 
-
     @mcp.tool()
-    def get_available_doctors(
-        department_id: int,
-        start_date: str,
-        end_date: str
-    ):
-        """
-        Get doctors available within a date range
-        for a particular department.
-        """
-
-        db = get_db()
-
+    def get_hospital_closures(hospital_id: int = 1):
+        """List upcoming/known closure days for the hospital."""
+        db = SessionLocal()
         try:
-            service = DoctorAvailabilityService(db)
-
-            doctors = service.get_available_doctors(
-                department_id=department_id,
-                start_date=start_date,
-                end_date=end_date
-            )
-
+            service = HospitalAvailabilityService(db)
+            closures = service.get_closures(hospital_id)
             return {
                 "success": True,
-                "doctors": [
+                "closures": [
                     {
-                        "id": doctor.id,
-                        "name": doctor.name,
-                        "department_id": doctor.department_id
+                        "closure_day": c.closure_day.isoformat(),
+                        "reason": c.reason,
                     }
-                    for doctor in doctors
-                ]
+                    for c in closures
+                ],
             }
-
-        finally:
-            db.close()
-
-
-    @mcp.tool()
-    def get_doctor_availability(
-        doctor_id: int,
-        start_date: str,
-        end_date: str
-    ):
-        """
-        Get a doctor's availability between two dates.
-        """
-
-        db = get_db()
-
-        try:
-            service = DoctorAvailabilityService(db)
-
-            result = service.get_doctor_availability(
-                doctor_id=doctor_id,
-                start_date=start_date,
-                end_date=end_date
-            )
-
-            return {
-                "success": True,
-                "availability": result
-            }
-
         finally:
             db.close()

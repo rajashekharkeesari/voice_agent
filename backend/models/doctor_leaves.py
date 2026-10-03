@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Date, ForeignKey, Integer, String
 
-from db.connection import Base
+from backend.db.connection import Base
 
 
 class DoctorLeaves(Base):

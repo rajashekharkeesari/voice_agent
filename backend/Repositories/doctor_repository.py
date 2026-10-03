@@ -1,4 +1,4 @@
-from models.doctors import Doctor
+from backend.models.doctors import Doctor
 
 class DoctorRepository:
     def __init__(self,session):
@@ -31,7 +31,17 @@ class DoctorRepository:
         return self.session.query(Doctor).filter(Doctor.department_id == department_id).all()
 
     get_doctor_by_department = get_doctors_by_department
-    
+
+    def find_by_name(self, name):
+        """Case-insensitive partial match on doctor name (e.g. "smith")."""
+        pattern = f"%{(name or '').strip()}%"
+        return (
+            self.session.query(Doctor)
+            .filter(Doctor.name.ilike(pattern))
+            .order_by(Doctor.name)
+            .all()
+        )
+
     def get_all_doctors(self):
         return self.session.query(Doctor).order_by(Doctor.name).all()
 

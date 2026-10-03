@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String
 
-from db.connection import Base
+from backend.db.connection import Base
 
 class Department(Base):
     __tablename__ = "departments"
